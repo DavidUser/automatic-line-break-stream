@@ -1,28 +1,33 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <functional>
 #include <iostream>
 
 template <size_t size>
 class StrictNewLineOutputBuffer : public std::streambuf {
  public:
-  StrictNewLineOutputBuffer() { setp(buffer.begin(), buffer.end()); }
+  using Traits = std::function<void(const char*)>;
+
+  StrictNewLineOutputBuffer(Traits t) : traits(t) {
+    setp(buffer.begin(), buffer.end());
+  }
   virtual ~StrictNewLineOutputBuffer() { sync(); }
 
   int sync() override {
-    std::string cotent(buffer.begin(), pptr());
+    std::string content(buffer.begin(), pptr());
 
-    if (auto new_line_pos = cotent.find_last_of('\n');
+    if (auto new_line_pos = content.find_last_of('\n');
         new_line_pos != std::string::npos) {
-      std::cout << cotent.substr(0, new_line_pos + 1);
+      traits(content.substr(0, new_line_pos).c_str());
 
-      auto rest = cotent.substr(new_line_pos + 1);
+      auto rest = content.substr(new_line_pos + 1);
       std::strncpy(buffer.begin(), rest.data(), rest.length());
       setp(buffer.begin() + rest.length(), buffer.end());
       return 0;
     }
 
-    std::cout << cotent << std::endl;
+    traits(content.c_str());
     setp(buffer.begin(), buffer.end());
     return 0;
   }
@@ -36,11 +41,15 @@ class StrictNewLineOutputBuffer : public std::streambuf {
 
  private:
   std::array<char, size> buffer;
+  Traits traits;
 };
 
-class Printer : public std::ostream {
+class AutoLineBreakStream : public std::ostream {
  public:
-  Printer() : std::ostream(&buffer) {}
+  AutoLineBreakStream()
+      : std::ostream(&buffer),
+        buffer([](const char* content) { std::cout << content << std::endl; }) {
+  }
 
  private:
   StrictNewLineOutputBuffer<13> buffer;
@@ -51,11 +60,11 @@ int main(void) {
   for (int i = 0; i < 200; ++i) {
     huge_report += (i % 10) + '0';
   }
-  huge_report[50] = '\n';
+  huge_report[45] = '\n';
 
   std::cout << huge_report << std::endl;
   std::cout << "----------------------------------------------" << std::endl;
-  Printer pout;
+  AutoLineBreakStream pout;
   pout << huge_report;
   return 0;
 }
